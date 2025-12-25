@@ -1,0 +1,12 @@
+build/
+.vscode/
+*.o
+*.d
+mqjs_stdlib
+example
+mqjs
+.cache/
+examples/example_stdlib
+examples/example_stdlib.h
+src/repl/mqjs_stdlib.h
+src/core/mquickjs_atom.h

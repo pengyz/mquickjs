@@ -3,7 +3,7 @@
 #CONFIG_ARM32=y
 #CONFIG_WIN32=y
 #CONFIG_SOFTFLOAT=y
-#CONFIG_ASAN=y
+CONFIG_ASAN=y
 #CONFIG_GPROF=y
 CONFIG_SMALL=y
 # consider warnings as errors (for development)
@@ -27,8 +27,8 @@ endif
 
 HOST_CC=gcc
 CC=$(CROSS_PREFIX)gcc
-CFLAGS=-Wall -g -MMD -D_GNU_SOURCE -fno-math-errno -fno-trapping-math
-HOST_CFLAGS=-Wall -g -MMD -D_GNU_SOURCE -fno-math-errno -fno-trapping-math
+CFLAGS=-Wall -g -MMD -D_GNU_SOURCE -fno-math-errno -fno-trapping-math -Isrc/core -Isrc/libc -Isrc/utils
+HOST_CFLAGS=-Wall -g -MMD -D_GNU_SOURCE -fno-math-errno -fno-trapping-math -lm
 ifdef CONFIG_WERROR
 CFLAGS+=-Werror
 HOST_CFLAGS+=-Werror
@@ -80,42 +80,71 @@ TEST_PROGS=dtoa_test libm_test
 
 all: $(PROGS)
 
-MQJS_OBJS=mqjs.o readline_tty.o readline.o mquickjs.o dtoa.o libm.o cutils.o
+MQJS_OBJS=src/repl/mqjs.o src/utils/readline_tty.o src/utils/readline.o src/core/mquickjs.o src/libc/dtoa.o src/libc/libm.o src/utils/cutils.o
 LIBS=-lm
 
 mqjs$(EXE): $(MQJS_OBJS)
 	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
 
-mquickjs.o: mquickjs_atom.h
+src/core/mquickjs.o: src/core/mquickjs_atom.h
 
-mqjs_stdlib: mqjs_stdlib.host.o mquickjs_build.host.o
+# Build tools for generating headers
+mqjs_stdlib: tools/mquickjs_build.host.o src/repl/mqjs_stdlib.host.o
 	$(HOST_CC) $(HOST_LDFLAGS) -o $@ $^
 
-mquickjs_atom.h: mqjs_stdlib
+tools/mquickjs_build.host.o: tools/mquickjs_build.c
+	$(HOST_CC) $(HOST_CFLAGS) -Isrc/utils -Isrc/core -c -o $@ $<
+
+src/repl/mqjs_stdlib.host.o: src/repl/mqjs_stdlib.c
+	$(HOST_CC) $(HOST_CFLAGS) -Isrc/utils -Isrc/core -Itools -c -o $@ $<
+
+src/core/mquickjs_atom.h: mqjs_stdlib
 	./mqjs_stdlib -a $(MQJS_BUILD_FLAGS) > $@
 
-mqjs_stdlib.h: mqjs_stdlib
+src/repl/mqjs_stdlib.h: mqjs_stdlib
 	./mqjs_stdlib $(MQJS_BUILD_FLAGS) > $@
 
-mqjs.o: mqjs_stdlib.h
+src/repl/mqjs.o: src/repl/mqjs_stdlib.h
 
 # C API example
-example.o: example_stdlib.h
+examples/example.o: examples/example_stdlib.h
 
-example$(EXE): example.o mquickjs.o dtoa.o libm.o cutils.o
+example$(EXE): examples/example.o src/core/mquickjs.o src/libc/dtoa.o src/libc/libm.o src/utils/cutils.o
 	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
 
-example_stdlib: example_stdlib.host.o mquickjs_build.host.o
+examples/example_stdlib: examples/example_stdlib.host.o tools/mquickjs_build.host.o
 	$(HOST_CC) $(HOST_LDFLAGS) -o $@ $^
 
-example_stdlib.h: example_stdlib
-	./example_stdlib $(MQJS_BUILD_FLAGS) > $@
+examples/example_stdlib.host.o: examples/example_stdlib.c
+	$(HOST_CC) $(HOST_CFLAGS) -Isrc/utils -Isrc/core -Iexamples -Isrc/repl -Itools -c -o $@ $<
 
-%.o: %.c
+examples/example_stdlib.h: examples/example_stdlib
+	./examples/example_stdlib $(MQJS_BUILD_FLAGS) > $@
+
+# 编译规则
+src/%.o: src/%.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
+src/utils/%.o: src/utils/%.c
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+src/core/%.o: src/core/%.c
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+src/libc/%.o: src/libc/%.c
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+src/repl/%.o: src/repl/%.c
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+examples/%.o: examples/%.c
+	$(CC) $(CFLAGS) -Iexamples -c -o $@ $<
+
+tools/%.o: tools/%.c
+	$(CC) $(CFLAGS) -Isrc/utils -Isrc/core -Iexamples -Isrc/libc -c -o $@ $<
+
 %.host.o: %.c
-	$(HOST_CC) $(HOST_CFLAGS) -c -o $@ $<
+	$(HOST_CC) $(HOST_CFLAGS) -Isrc/utils -Isrc/core -Iexamples -Isrc/libc -Itools -c -o $@ $<
 
 test: mqjs example
 	./mqjs tests/test_closure.js
@@ -135,18 +164,22 @@ octane: mqjs
 	./mqjs --memory-limit 256M tests/octane/run.js
 
 size: mqjs
-	size mqjs mqjs.o readline.o cutils.o dtoa.o libm.o mquickjs.o
+	size mqjs src/repl/mqjs.o src/utils/readline.o src/utils/cutils.o src/libc/dtoa.o src/libc/libm.o src/core/mquickjs.o
 
-dtoa_test: tests/dtoa_test.o dtoa.o cutils.o tests/gay-fixed.o tests/gay-precision.o tests/gay-shortest.o
+dtoa_test: tests/dtoa_test.o src/libc/dtoa.o src/utils/cutils.o tests/gay-fixed.o tests/gay-precision.o tests/gay-shortest.o
 	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
 
-libm_test: tests/libm_test.o libm.o
+libm_test: tests/libm_test.o src/libc/libm.o
 	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
 
-rempio2_test: tests/rempio2_test.o libm.o
+rempio2_test: tests/rempio2_test.o src/libc/libm.o
 	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
 
+.PHONY: clean
 clean:
-	rm -f *.o *.d *~ tests/*.o tests/*.d tests/*~ test_builtin.bin mqjs_stdlib mqjs_stdlib.h mquickjs_build_atoms mquickjs_atom.h mqjs_example example_stdlib example_stdlib.h $(PROGS) $(TEST_PROGS)
+	rm -f *.o *.d *~ tests/*.o tests/*.d tests/*~ test_builtin.bin mqjs_stdlib mqjs_stdlib.h mquickjs_build_atoms mquickjs_atom.h mqjs_example example_stdlib example_stdlib.h $(PROGS) $(TEST_PROGS) tools/mqjs_js_module_gen examples/example_stdlib examples/example_stdlib.h
+	find . \( -name "*.o" -o -name "*.d" -o -name "*~" \) -type f -not -path "./build/*" -delete
 
 -include $(wildcard *.d)
+-include $(wildcard src/*/*.d)
+-include $(wildcard examples/*.d)
