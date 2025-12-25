@@ -1,0 +1,1 @@
+/usr/bin/cc  -Wall -MMD -D_GNU_SOURCE -fno-math-errno -fno-trapping-math -fno-strict-aliasing -fsingle-precision-constant -Os -rdynamic CMakeFiles/example.dir/example.c.o -o example  ../src/libmquickjs_lib.a -lm 

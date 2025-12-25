@@ -18,6 +18,56 @@ different in order to consume less memory. In particular, it relies on
 a tracing garbage collector, the VM does not use the CPU stack and
 strings are stored in UTF-8.
 
+## Project Structure
+
+The project has been reorganized into the following structure:
+```
+├── src/                 # Source code
+│   ├── core/           # Core engine implementation
+│   ├── libc/           # Math and double implementation
+│   ├── repl/           # REPL (mqjs) implementation
+│   └── utils/          # Utility functions and helpers
+├── examples/           # Example applications and build tools
+├── tests/              # Test files
+└── CMakeLists.txt      # CMake build configuration
+```
+
+## Building
+
+### Using CMake (new)
+
+```bash
+mkdir build
+cd build
+cmake ..
+make
+```
+
+### Using Make (legacy)
+
+```bash
+make
+```
+
+## Tools
+
+In addition to the core JavaScript engine, MQuickJS provides several useful tools:
+
+- `mqjs`: The MQuickJS REPL (Read-Eval-Print Loop) interpreter
+- `mqjs_stdlib`: Tool to generate the standard library as static C structures
+- `mqjs_js_module_gen`: **NEW** Tool to convert arbitrary JavaScript files to static C structures (see [README_JS_MODULE_GEN.md](file:///home/peng/workspace/mquickjs/README_JS_MODULE_GEN.md))
+
+## JS Module Generator
+
+MQuickJS now includes a new tool `mqjs_js_module_gen` that allows you to convert any JavaScript file into static C structures that can be embedded directly in your application. This enables:
+
+- Reduced memory usage in embedded systems
+- Faster startup times
+- Storage of JS code in ROM instead of RAM
+- Creation of self-contained applications
+
+See [README_JS_MODULE_GEN.md](file:///home/peng/workspace/mquickjs/README_JS_MODULE_GEN.md) for detailed usage instructions.
+
 ## REPL
 
 The REPL is `mqjs`. Usage:
@@ -349,23 +399,23 @@ bytecode is generated in one pass with several tricks to optimize it
 ## Tests and benchmarks
 
 Running the basic tests:
-``
+```
 make test
-``
+```
 
 Running the QuickJS micro benchmark:
-``
+```
 make microbench
-``
+```
 
 Addtional tests and a patched version of the Octane benchmark running
 in stricter mode can be downloaded
 [here](https://bellard.org/mquickjs/mquickjs-extras.tar.xz):
 
 Running the V8 octane benchmark:
-``
+```
 make octane
-``
+```
 
 ## License
 
@@ -373,4 +423,3 @@ MQuickJS is released under the MIT license.
 
 Unless otherwise specified, the MQuickJS sources are copyright Fabrice
 Bellard and Charlie Gordon.
-

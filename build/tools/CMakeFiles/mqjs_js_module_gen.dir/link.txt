@@ -1,0 +1,1 @@
+/usr/bin/cc  -Wall -MMD -D_GNU_SOURCE -fno-math-errno -fno-trapping-math -fno-strict-aliasing -fsingle-precision-constant -Os -rdynamic CMakeFiles/mqjs_js_module_gen.dir/mqjs_js_module_gen.c.o -o mqjs_js_module_gen  ../src/libmquickjs_lib.a -lm 

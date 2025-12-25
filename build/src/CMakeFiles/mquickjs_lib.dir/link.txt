@@ -1,0 +1,2 @@
+/usr/bin/ar qc libmquickjs_lib.a CMakeFiles/mquickjs_lib.dir/core/mquickjs.c.o CMakeFiles/mquickjs_lib.dir/libc/libm.c.o CMakeFiles/mquickjs_lib.dir/libc/dtoa.c.o CMakeFiles/mquickjs_lib.dir/utils/cutils.c.o CMakeFiles/mquickjs_lib.dir/utils/readline.c.o CMakeFiles/mquickjs_lib.dir/utils/readline_tty.c.o
+/usr/bin/ranlib libmquickjs_lib.a

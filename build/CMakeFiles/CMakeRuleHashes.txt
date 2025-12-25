@@ -1,0 +1,4 @@
+# Hashes of file build rules.
+cb37209a14a885da90d7532d1c7d587d generated/mquickjs_atom.h
+aa5e7e4025978f37b7cfac8325d20f41 mqjs_stdlib
+efb1230e6fc7a30bd7b43f45956abf7c tools/CMakeFiles/generate_headers
