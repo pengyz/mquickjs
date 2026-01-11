@@ -264,6 +264,29 @@ JSContext *JS_NewContext(void *mem_start, size_t mem_size, const JSSTDLibraryDef
 JSContext *JS_NewContext2(void *mem_start, size_t mem_size, const JSSTDLibraryDef *stdlib_def, JS_BOOL prepare_compilation);
 void JS_FreeContext(JSContext *ctx);
 void JS_SetContextOpaque(JSContext *ctx, void *opaque);
+
+typedef void (*JSContextUserDataFinalizer)(JSContext *ctx, void *user_data);
+void JS_SetContextUserData(JSContext *ctx, void *user_data, JSContextUserDataFinalizer fin);
+void *JS_GetContextUserData(JSContext *ctx);
+
+/* ridl-tool: per-JSContext extension header (C ABI) */
+#define RIDL_CTX_EXT_MAGIC 0x5249444c /* 'RIDL' */
+#define RIDL_CTX_EXT_ABI_VERSION 1
+
+typedef struct RidlConsoleVTable {
+    void *self_ptr;
+    void (*drop_fn)(void *self_ptr);
+    void (*log_fn)(void *self_ptr, JSContext *ctx, JSValue this_val, int argc, JSValue *argv);
+    void (*error_fn)(void *self_ptr, JSContext *ctx, JSValue this_val, int argc, JSValue *argv);
+    int (*enabled_fn)(void *self_ptr);
+} RidlConsoleVTable;
+
+typedef struct RidlCtxExtHeader {
+    uint32_t magic;
+    uint32_t abi_version;
+    RidlConsoleVTable console;
+} RidlCtxExtHeader;
+
 void JS_SetInterruptHandler(JSContext *ctx, JSInterruptHandler *interrupt_handler);
 void JS_SetRandomSeed(JSContext *ctx, uint64_t seed);
 JSValue JS_GetGlobalObject(JSContext *ctx);

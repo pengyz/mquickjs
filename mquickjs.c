@@ -236,6 +236,12 @@ struct JSContext {
     JSInterruptHandler *interrupt_handler;
     JSWriteFunc *write_func; /* for the various dump functions */
     void *opaque;
+
+    /* Extension/user data attached to this JSContext.
+       Must only be used for memory management (no JS API) in its finalizer. */
+    void *user_data;
+    void (*user_data_finalizer)(JSContext *ctx, void *user_data);
+
     JSValue *class_obj; /* same as class_proto + class_count */
     JSStringPosCacheEntry string_pos_cache[JS_STRING_POS_CACHE_SIZE];
                                            
@@ -3641,7 +3647,10 @@ JSContext *JS_NewContext2(void *mem_start, size_t mem_size, const JSSTDLibraryDe
     if (!prepare_compilation) {
         stdlib_init(ctx, (JSValueArray *)(stdlib_def->stdlib_table + stdlib_def->global_object_offset));
     }
-    
+
+    ctx->user_data = NULL;
+    ctx->user_data_finalizer = NULL;
+
     return ctx;
 }
 
@@ -3656,7 +3665,7 @@ void JS_FreeContext(JSContext *ctx)
     uint8_t *ptr;
     int size;
     JSObject *p;
-    
+
     ptr = ctx->heap_base;
     while (ptr < ctx->heap_free) {
         size = get_mblock_size(ptr);
@@ -3667,11 +3676,30 @@ void JS_FreeContext(JSContext *ctx)
         }
         ptr += size;
     }
-}
 
+    /* ctx-level user data finalizer.
+       Contract: it must not call any JS API (only free/drop user_data). */
+    if (ctx->user_data_finalizer) {
+        ctx->user_data_finalizer(ctx, ctx->user_data);
+    }
+    ctx->user_data = NULL;
+    ctx->user_data_finalizer = NULL;
+}
 void JS_SetContextOpaque(JSContext *ctx, void *opaque)
 {
     ctx->opaque = opaque;
+}
+
+void JS_SetContextUserData(JSContext *ctx, void *user_data,
+                           void (*user_data_finalizer)(JSContext *ctx, void *user_data))
+{
+    ctx->user_data = user_data;
+    ctx->user_data_finalizer = user_data_finalizer;
+}
+
+void *JS_GetContextUserData(JSContext *ctx)
+{
+    return ctx->user_data;
 }
 
 void JS_SetInterruptHandler(JSContext *ctx, JSInterruptHandler *interrupt_handler)
