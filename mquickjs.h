@@ -288,6 +288,39 @@ typedef struct RidlCtxExtHeader {
 } RidlCtxExtHeader;
 
 void JS_SetInterruptHandler(JSContext *ctx, JSInterruptHandler *interrupt_handler);
+
+/* ridl-tool: ensure a class prototype exists for a given class_id.
+
+   This is an escape hatch for RIDL-driven initialization that must be able to
+   install JS-only prototype fields (e.g. proto var) without relying on ROMClass
+   materialization paths.
+
+   Returns:
+   - prototype object when successful
+   - JS_EXCEPTION on error
+*/
+JSValue JS_EnsureClassProto(JSContext *ctx, int class_id);
+
+/* ridl-tool: materialize ROMClass export into a JS constructor function.
+   Returns:
+   - ctor function (typeof === 'function') when successful
+   - JS_EXCEPTION on error
+   - JS_UNDEFINED when val is not a materializable ROMClass
+*/
+JSValue JS_MaterializeROMClass(JSContext *ctx, JSValue val);
+
+/* materialize all ROMClass exports on a module instance.
+   Scans instance own props and one-level prototype props; writes back as own
+   properties on the module instance.
+   Returns 0 on success, -1 on exception.
+*/
+int JS_MaterializeModuleClassExports(JSContext *ctx, JSValue module_obj);
+
+/* materialize all ROMClass exports on a module prototype.
+   Scans the prototype props; writes back onto the prototype.
+   Returns 0 on success, -1 on exception.
+*/
+int JS_MaterializeModuleClassExportsToProto(JSContext *ctx, JSValue module_proto);
 void JS_SetRandomSeed(JSContext *ctx, uint64_t seed);
 JSValue JS_GetGlobalObject(JSContext *ctx);
 JSValue JS_Throw(JSContext *ctx, JSValue obj);

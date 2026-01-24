@@ -35,7 +35,20 @@
 #include "list.h"
 #include "mquickjs_build.h"
 
+/* Only present when mqjs_stdlib_template.c includes RIDL umbrella header */
+#ifdef MQUICKJS_ENABLE_RIDL_EXTENSIONS
+#include "mquickjs_ridl_register.h"
+#endif
+
+#undef JSW
 static unsigned JSW = 4; // override this with -m64
+
+/*
+ * When the RIDL umbrella header is present, it defines `JSW` (build-time word size) as a macro.
+ * The ROM generator needs a mutable runtime value, so we store it in JSW and also export a macro
+ * alias for code that expects JSW to exist.
+ */
+#define JSW JSW
 
 typedef struct {
     char *str;
@@ -69,6 +82,7 @@ typedef struct {
     int class_idx;
     char *finalizer_name;
     char *class_id;
+    char *name;
 } ClassDefEntry;
 
 typedef struct {
@@ -288,6 +302,8 @@ static int atom_cmp(const void *p1, const void *p2)
    table uses the low bits of the atom pointer value */
 #define ATOM_ALIGN 64
 
+static int define_class(BuildContext *s, const JSClassDef *d);
+
 static void dump_atoms(BuildContext *ctx)
 {
     AtomList *s = &ctx->atom_list;
@@ -398,7 +414,7 @@ static void dump_cfinalizers(BuildContext *s)
 {
     struct list_head *el;
     ClassDefEntry *e;
-    
+
     printf("static const JSCFinalizer js_c_finalizer_table[JS_CLASS_COUNT - JS_CLASS_USER] = {\n");
     list_for_each(el, &s->class_list) {
         e = list_entry(el, ClassDefEntry, link);
@@ -410,6 +426,42 @@ static void dump_cfinalizers(BuildContext *s)
     printf("};\n\n");
 }
 
+static void dump_romclass_index_json(BuildContext *s, const char *path);
+
+
+static void dump_romclass_index_json(BuildContext *s, const char *path)
+{
+    struct list_head *el;
+    ClassDefEntry *e;
+    FILE *f;
+    int first = 1;
+
+    f = fopen(path, "w");
+    if (!f) {
+        perror("fopen");
+        exit(1);
+    }
+
+    fprintf(f, "{\n");
+
+    list_for_each(el, &s->class_list) {
+        e = list_entry(el, ClassDefEntry, link);
+        if (!e->class_id)
+            continue;
+        if (!strstr(e->class_id, "_MODULE"))
+            continue;
+
+        if (!first)
+            fprintf(f, ",\n");
+        first = 0;
+
+        /* key is JS_CLASS_*_MODULE ident string */
+        fprintf(f, "  \"%s\": %d", e->class_id, e->class_idx);
+    }
+
+    fprintf(f, "\n}\n");
+    fclose(f);
+}
 typedef enum {
     PROPS_KIND_GLOBAL,
     PROPS_KIND_PROTO,
@@ -617,6 +669,7 @@ static void free_class_entries(BuildContext *s)
         e = list_entry(el, ClassDefEntry, link);
         free(e->class_id);
         free(e->finalizer_name);
+        free(e->name);
         free(e);
     }
     init_list_head(&s->class_list);
@@ -678,6 +731,7 @@ static int define_class(BuildContext *s, const JSClassDef *d)
     memset(e, 0, sizeof(*e));
     e->class_idx = ident;
     e->class1 = d;
+    e->name = strdup(d->name);
     if (ctor_func_idx >= 0) {
         e->class_id = strdup(d->class_id);
         e->finalizer_name = strdup(d->finalizer_name);
@@ -819,13 +873,14 @@ static void define_atoms_props(BuildContext *s, const JSPropDef *props_def, JSPr
 
 static int usage(const char *name)
 {
-    fprintf(stderr, "usage: %s {-m32 | -m64} [-a]\n", name);
+    fprintf(stderr, "usage: %s {-m32 | -m64} [-a] [-M <path>]\n", name);
     fprintf(stderr,
             "    create a ROM file for the mquickjs standard library\n"
             "--help       list options\n"
             "-m32         force generation for a 32 bit target\n"
             "-m64         force generation for a 64 bit target\n"
             "-a           generate the mquickjs_atom.h header\n"
+            "-M <path>    dump JSON mapping {class_id -> rom_class_offset}\n"
             );
     return 1;
 }
@@ -837,12 +892,13 @@ int build_atoms(const char *stdlib_name, const JSPropDef *global_obj,
     unsigned jsw;
     BuildContext ss, *s = &ss;
     BOOL build_atom_defines = FALSE;
-    
+    const char *dump_romclass_index_path = NULL;
+
 #if INTPTR_MAX >= INT64_MAX
     jsw = 8;
 #else
     jsw = 4;
-#endif    
+#endif
     for (i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "-m64")) {
             jsw = 8;
@@ -850,6 +906,12 @@ int build_atoms(const char *stdlib_name, const JSPropDef *global_obj,
             jsw = 4;
         } else if (!strcmp(argv[i], "-a")) {
             build_atom_defines = TRUE;
+        } else if (!strcmp(argv[i], "-M")) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "-M expects a path\n");
+                return usage(argv[0]);
+            }
+            dump_romclass_index_path = argv[++i];
         } else if (!strcmp(argv[i], "--help")) {
             return usage(argv[0]);
         } else {
@@ -859,11 +921,16 @@ int build_atoms(const char *stdlib_name, const JSPropDef *global_obj,
     }
 
     JSW = jsw;
-    
+
     if (build_atom_defines) {
         dump_atom_defines();
         return 0;
     }
+    /*
+     * NOTE: romclass index dump must observe the same class universe/offsets as the
+     * main ROM build. Therefore this option is implemented as an *additional output*
+     * on the main build path (after define_props()).
+     */
     
     memset(s, 0, sizeof(*s));
     init_list_head(&s->class_list);
@@ -904,6 +971,10 @@ int build_atoms(const char *stdlib_name, const JSPropDef *global_obj,
     dump_atoms(s);
 
     s->global_object_offset = define_props(s, global_obj, PROPS_KIND_GLOBAL, NULL);
+
+    if (dump_romclass_index_path) {
+        dump_romclass_index_json(s, dump_romclass_index_path);
+    }
 
     printf("};\n\n");
 

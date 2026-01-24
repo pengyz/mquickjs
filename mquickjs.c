@@ -3707,6 +3707,166 @@ void JS_SetInterruptHandler(JSContext *ctx, JSInterruptHandler *interrupt_handle
     ctx->interrupt_handler = interrupt_handler;
 }
 
+JSValue JS_EnsureClassProto(JSContext *ctx, int class_id)
+{
+    if (class_id < 0 || class_id >= ctx->class_count) {
+        return JS_EXCEPTION;
+    }
+
+    JSValue proto = ctx->class_proto[class_id];
+    if (!JS_IsNull(proto)) {
+        return proto;
+    }
+
+    /* Default user classes to inherit from Object.prototype unless stdlib_init_class
+       (ROMClass materialization) sets up a different prototype chain. */
+    JSValue parent_proto = ctx->class_proto[JS_CLASS_OBJECT];
+    proto = JS_NewObjectProtoClass(ctx, parent_proto, JS_CLASS_OBJECT, 0);
+    ctx->class_proto[class_id] = proto;
+    return proto;
+}
+
+JSValue JS_MaterializeROMClass(JSContext *ctx, JSValue val)
+{
+    /*
+     * Engine-facing helper:
+     * - If val is a ROMClass, ensure its prototype is initialized and return
+     *   the constructor function.
+     * - Otherwise return JS_UNDEFINED.
+     */
+    if (!JS_IsPtr(val))
+        return JS_UNDEFINED;
+
+    const JSROMClass *rc = (const JSROMClass *)JS_VALUE_TO_PTR(val);
+    if (!JS_IS_ROM_PTR(ctx, rc) || rc->ctor_idx < 0)
+        return JS_UNDEFINED;
+
+    /* Ensure proto exists + proto_props attached (parent recursion stays in stdlib_init_class). */
+    (void)stdlib_init_class(ctx, rc);
+
+    int class_id = ctx->c_function_table[rc->ctor_idx].magic;
+    JSValue proto = ctx->class_proto[class_id];
+    if (JS_IsNull(proto)) {
+        /* should not happen, but keep behavior safe */
+        return JS_EXCEPTION;
+    }
+
+    /* NOTE: stdlib_init_class() already attached rc->proto_props to the canonical
+       prototype (and may have merged/installed additional properties). Do not
+       reassign proto->props here, otherwise later JS-visible prototype writes
+       (e.g. RIDL proto vars) could be lost by a late overwrite. */
+
+    return ctx->class_obj[class_id];
+}
+
+static int js_ridl_materialize_props(JSContext *ctx, JSValue module_obj, JSValue props)
+{
+    JSValueArray *arr;
+    int prop_count, hash_mask, i, j;
+
+    if (!JS_IsPtr(props)) {
+        return 0;
+    }
+
+    arr = JS_VALUE_TO_PTR(props);
+    if (!JS_IS_ROM_PTR(ctx, arr)) {
+        return 0;
+    }
+
+    prop_count = JS_VALUE_GET_INT(arr->arr[0]);
+    hash_mask = JS_VALUE_GET_INT(arr->arr[1]);
+
+    for (i = 0, j = 0; j < prop_count; i++) {
+        int idx = 2 + (hash_mask + 1) + 3 * i;
+        JSProperty *pr = (JSProperty *)&arr->arr[idx];
+        if (pr->key != JS_UNINITIALIZED) {
+            /*
+             * Only consume entries that came from JS_PROP_CLASS_DEF (i.e.
+             * constructors/classes encoded as ROMClass handles).
+             *
+             * JS_CFUNC_DEF exports are functions (JS_TAG_SHORT_FUNC etc) and are
+             * intentionally not materialized onto module instances.
+             */
+            if (pr->prop_type == JS_PROP_NORMAL && JS_IsPtr(pr->value)) {
+                JSValue ctor = JS_MaterializeROMClass(ctx, pr->value);
+                        if (JS_IsException(ctor))
+                    return -1;
+                if (!JS_IsUndefined(ctor)) {
+                    /* make sure module_obj props are in RAM before defining */
+                    if (js_update_props(ctx, module_obj) < 0)
+                        return -1;
+                    JSObject *mo = JS_VALUE_TO_PTR(module_obj);
+                    JSProperty *mpr = js_create_property(ctx, module_obj, pr->key);
+                    if (!mpr)
+                        return -1;
+                    mpr->value = ctor;
+                    mpr->prop_type = JS_PROP_NORMAL;
+                }
+            }
+            j++;
+        }
+    }
+    return 0;
+}
+
+int JS_MaterializeModuleClassExports(JSContext *ctx, JSValue module_obj)
+{
+    JSObject *p;
+    int class_id;
+    JSValue class_obj;
+    JSObject *co;
+
+
+    if (!JS_IsPtr(module_obj))
+        return 0;
+
+    p = JS_VALUE_TO_PTR(module_obj);
+    if (p->mtag != JS_MTAG_OBJECT)
+        return 0;
+
+    /*
+     * module_obj/its proto usually already got copied to RAM (eg. constructor
+     * assigns), so we must read exports from the canonical class proto, whose
+     * props are still the ROM proto_props attached by stdlib_init_class().
+     */
+    class_id = p->class_id;
+    if (class_id < 0 || class_id >= ctx->class_count)
+        return 0;
+
+    class_obj = ctx->class_obj[class_id];
+    if (!JS_IsPtr(class_obj))
+        return 0;
+
+    co = JS_VALUE_TO_PTR(class_obj);
+    if (co->mtag != JS_MTAG_OBJECT)
+        return 0;
+
+    if (!JS_IsNull(co->proto) && JS_IsPtr(co->proto)) {
+        JSObject *class_proto = JS_VALUE_TO_PTR(co->proto);
+        if (class_proto->mtag == JS_MTAG_OBJECT) {
+                    if (js_ridl_materialize_props(ctx, module_obj, class_proto->props) < 0)
+                return -1;
+        }
+    }
+
+    return 0;
+}
+
+int JS_MaterializeModuleClassExportsToProto(JSContext *ctx, JSValue module_proto)
+{
+    JSObject *p;
+
+
+    if (!JS_IsPtr(module_proto))
+        return 0;
+
+    p = JS_VALUE_TO_PTR(module_proto);
+    if (p->mtag != JS_MTAG_OBJECT)
+        return 0;
+
+    return js_ridl_materialize_props(ctx, module_proto, p->props);
+}
+
 void JS_SetLogFunc(JSContext *ctx, JSWriteFunc *write_func)
 {
     ctx->write_func = write_func;
