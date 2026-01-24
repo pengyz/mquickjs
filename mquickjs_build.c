@@ -35,20 +35,8 @@
 #include "list.h"
 #include "mquickjs_build.h"
 
-/* Only present when mqjs_stdlib_template.c includes RIDL umbrella header */
-#ifdef MQUICKJS_ENABLE_RIDL_EXTENSIONS
-#include "mquickjs_ridl_register.h"
-#endif
-
 #undef JSW
 static unsigned JSW = 4; // override this with -m64
-
-/*
- * When the RIDL umbrella header is present, it defines `JSW` (build-time word size) as a macro.
- * The ROM generator needs a mutable runtime value, so we store it in JSW and also export a macro
- * alias for code that expects JSW to exist.
- */
-#define JSW JSW
 
 typedef struct {
     char *str;
