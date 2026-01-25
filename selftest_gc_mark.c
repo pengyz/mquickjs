@@ -12,16 +12,31 @@
  */
 
 static int g_rect_finalizer_count;
+static int g_child_finalizer_count;
 
 typedef struct {
     JSValue held;
 } RectNative;
+
+typedef struct {
+    /* This intentionally duplicates the "held" pattern, but the class' gc_mark
+     * will be NULL to verify we do not implicitly inherit parent's gc_mark.
+     */
+    JSValue held;
+} ChildNative;
 
 static void rect_finalizer(JSContext *ctx, void *opaque)
 {
     (void)ctx;
     (void)opaque;
     g_rect_finalizer_count++;
+}
+
+static void child_finalizer(JSContext *ctx, void *opaque)
+{
+    (void)ctx;
+    (void)opaque;
+    g_child_finalizer_count++;
 }
 
 static void rect_gc_mark(JSContext *ctx, void *opaque, const JSMarkFunc *mf)
@@ -32,7 +47,8 @@ static void rect_gc_mark(JSContext *ctx, void *opaque, const JSMarkFunc *mf)
 }
 
 #define JS_CLASS_RECT (JS_CLASS_USER + 0)
-#define JS_CLASS_COUNT (JS_CLASS_USER + 1)
+#define JS_CLASS_CHILD (JS_CLASS_USER + 1)
+#define JS_CLASS_COUNT (JS_CLASS_USER + 2)
 
 static JSValue rect_ctor(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv)
 {
@@ -62,8 +78,20 @@ static const JSPropDef rect_class_props[] = {
 static const JSClassDef rect_class_def =
     JS_CLASS_DEF("Rect", 0, rect_ctor, JS_CLASS_RECT, rect_class_props, rect_proto, NULL, rect_finalizer, rect_gc_mark);
 
+static const JSPropDef child_proto[] = {
+    JS_PROP_END,
+};
+
+static const JSPropDef child_class_props[] = {
+    JS_PROP_END,
+};
+
+static const JSClassDef child_class_def =
+    JS_CLASS_DEF("Child", 0, rect_ctor, JS_CLASS_CHILD, child_class_props, child_proto, &rect_class_def, child_finalizer, NULL);
+
 static const JSPropDef global_obj[] = {
     JS_PROP_CLASS_DEF("Rect", &rect_class_def),
+    JS_PROP_CLASS_DEF("Child", &child_class_def),
     JS_PROP_END,
 };
 
@@ -73,10 +101,12 @@ static const JSPropDef c_function_decl[] = {
 
 static const JSCFinalizer js_c_finalizer_table[JS_CLASS_COUNT - JS_CLASS_USER] = {
     [JS_CLASS_RECT - JS_CLASS_USER] = rect_finalizer,
+    [JS_CLASS_CHILD - JS_CLASS_USER] = child_finalizer,
 };
 
 static const JSCMark js_c_mark_table[JS_CLASS_COUNT - JS_CLASS_USER] = {
     [JS_CLASS_RECT - JS_CLASS_USER] = rect_gc_mark,
+    [JS_CLASS_CHILD - JS_CLASS_USER] = NULL,
 };
 
 static const JSSTDLibraryDef js_selftest_stdlib = {
@@ -134,6 +164,80 @@ static int test_user_class_cycle_is_collectable(void)
         fprintf(stderr, "selftest: expected finalizer to run for cycle collection\n");
         return 1;
     }
+    return 0;
+}
+
+/* Verify gc_mark is NOT inherited via parent_class:
+ * - Child is declared with parent_class = Rect, but has gc_mark = NULL.
+ * - If engine tried to walk parent_class for gc_mark, the held value would be marked
+ *   and the cycle would not be collectable.
+ */
+static int test_child_does_not_inherit_gc_mark(void)
+{
+    uint8_t mem_buf[65536];
+    JSContext *ctx = JS_NewContext(mem_buf, sizeof(mem_buf), &js_selftest_stdlib);
+    if (!ctx)
+        return 1;
+
+    g_child_finalizer_count = 0;
+
+    JSValue a = JS_NewObjectClassUser(ctx, JS_CLASS_CHILD);
+    ChildNative *d = malloc(sizeof(*d));
+    d->held = JS_UNDEFINED;
+    JS_SetOpaque(ctx, a, d);
+
+    JSValue b = make_plain_object(ctx);
+    JS_SetPropertyStr(ctx, b, "some", a);
+    d->held = b;
+
+    a = JS_UNDEFINED;
+    b = JS_UNDEFINED;
+
+    JS_GC(ctx);
+    JS_GC(ctx);
+
+    JS_FreeContext(ctx);
+
+    if (g_child_finalizer_count <= 0) {
+        fprintf(stderr, "selftest: expected child finalizer to run (no inherited gc_mark)\n");
+        return 1;
+    }
+    return 0;
+}
+
+static int test_stress_cycles_collectable(void)
+{
+    for (int i = 0; i < 200; i++) {
+        uint8_t mem_buf[65536];
+        JSContext *ctx = JS_NewContext(mem_buf, sizeof(mem_buf), &js_selftest_stdlib);
+        if (!ctx)
+            return 1;
+
+        g_rect_finalizer_count = 0;
+
+        JSValue a = JS_NewObjectClassUser(ctx, JS_CLASS_RECT);
+        RectNative *d = malloc(sizeof(*d));
+        d->held = JS_UNDEFINED;
+        JS_SetOpaque(ctx, a, d);
+
+        JSValue b = make_plain_object(ctx);
+        JS_SetPropertyStr(ctx, b, "some", a);
+        d->held = b;
+
+        a = JS_UNDEFINED;
+        b = JS_UNDEFINED;
+
+        JS_GC(ctx);
+        JS_GC(ctx);
+
+        JS_FreeContext(ctx);
+
+        if (g_rect_finalizer_count <= 0) {
+            fprintf(stderr, "selftest: stress iteration %d did not collect cycle\n", i);
+            return 1;
+        }
+    }
+
     return 0;
 }
 
@@ -215,6 +319,10 @@ int main(int argc, char **argv)
     (void)argv;
 
     if (test_user_class_cycle_is_collectable())
+        return 1;
+    if (test_child_does_not_inherit_gc_mark())
+        return 1;
+    if (test_stress_cycles_collectable())
         return 1;
     if (test_gc_ref_root_keeps_value_alive())
         return 1;
