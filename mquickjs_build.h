@@ -73,6 +73,7 @@ typedef struct JSClassDef {
     const JSPropDef *proto_props; /* NULL if none */
     const JSClassDef *parent_class; /* NULL if none */
     const char *finalizer_name; /* "NULL" if none */
+    const char *gc_mark_name; /* "NULL" if none */
 } JSClassDef;
 
 #define JS_PROP_END { JS_DEF_END }
@@ -87,9 +88,9 @@ typedef struct JSClassDef {
 #define JS_PROP_NULL_DEF(name, flags) { JS_DEF_PROP_NULL, name }
 #define JS_PROP_STRING_DEF(name, cstr, flags) { JS_DEF_PROP_STRING, name, { .str = cstr } }
 
-#define JS_CLASS_DEF(name, length, func_name, class_id, class_props, proto_props, parent_class, finalizer_name) { name, length, "constructor", #func_name, #class_id, class_props, proto_props, parent_class, #finalizer_name }
-#define JS_CLASS_MAGIC_DEF(name, length, func_name, class_id, class_props, proto_props, parent_class, finalizer_name) { name, length, "constructor_magic", #func_name, #class_id, class_props, proto_props, parent_class, #finalizer_name }
-#define JS_OBJECT_DEF(name, obj_props) { name, 0, NULL, NULL, NULL, obj_props, NULL, NULL, NULL }
+#define JS_CLASS_DEF(name, length, func_name, class_id, class_props, proto_props, parent_class, finalizer_name, gc_mark_name) { name, length, "constructor", #func_name, #class_id, class_props, proto_props, parent_class, #finalizer_name, #gc_mark_name }
+#define JS_CLASS_MAGIC_DEF(name, length, func_name, class_id, class_props, proto_props, parent_class, finalizer_name, gc_mark_name) { name, length, "constructor_magic", #func_name, #class_id, class_props, proto_props, parent_class, #finalizer_name, #gc_mark_name }
+#define JS_OBJECT_DEF(name, obj_props) { name, 0, NULL, NULL, NULL, obj_props, NULL, NULL, NULL, NULL }
 
 int build_atoms(const char *stdlib_name, const JSPropDef *global_obj,
                 const JSPropDef *c_function_decl, int argc, char **argv);

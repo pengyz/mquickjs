@@ -69,6 +69,7 @@ typedef struct {
     const JSClassDef *class1;
     int class_idx;
     char *finalizer_name;
+    char *gc_mark_name;
     char *class_id;
     char *name;
 } ClassDefEntry;
@@ -414,6 +415,22 @@ static void dump_cfinalizers(BuildContext *s)
     printf("};\n\n");
 }
 
+static void dump_cmarks(BuildContext *s)
+{
+    struct list_head *el;
+    ClassDefEntry *e;
+
+    printf("static const JSCMark js_c_mark_table[JS_CLASS_COUNT - JS_CLASS_USER] = {\n");
+    list_for_each(el, &s->class_list) {
+        e = list_entry(el, ClassDefEntry, link);
+        if (e->gc_mark_name &&
+            strcmp(e->gc_mark_name, "NULL") != 0) {
+            printf("  [%s - JS_CLASS_USER] = %s,\n", e->class_id, e->gc_mark_name);
+        }
+    }
+    printf("};\n\n");
+}
+
 static void dump_romclass_index_json(BuildContext *s, const char *path);
 
 
@@ -657,6 +674,7 @@ static void free_class_entries(BuildContext *s)
         e = list_entry(el, ClassDefEntry, link);
         free(e->class_id);
         free(e->finalizer_name);
+        free(e->gc_mark_name);
         free(e->name);
         free(e);
     }
@@ -723,6 +741,7 @@ static int define_class(BuildContext *s, const JSClassDef *d)
     if (ctor_func_idx >= 0) {
         e->class_id = strdup(d->class_id);
         e->finalizer_name = strdup(d->finalizer_name);
+        e->gc_mark_name = strdup(d->gc_mark_name);
     }
     list_add_tail(&e->link, &s->class_list);
     return ident;
@@ -973,6 +992,7 @@ int build_atoms(const char *stdlib_name, const JSPropDef *global_obj,
            "#endif\n\n");
 
     dump_cfinalizers(s);
+    dump_cmarks(s);
 
     free_class_entries(s);
 
@@ -980,6 +1000,7 @@ int build_atoms(const char *stdlib_name, const JSPropDef *global_obj,
     printf("  js_stdlib_table,\n");
     printf("  js_c_function_table,\n");
     printf("  js_c_finalizer_table,\n");
+    printf("  js_c_mark_table,\n");
     printf("  %d,\n", s->cur_offset);
     printf("  %d,\n", ATOM_ALIGN);
     printf("  %d,\n", s->sorted_atom_table_offset);

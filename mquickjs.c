@@ -232,6 +232,9 @@ struct JSContext {
     const JSValueArray *rom_atom_tables[N_ROM_ATOM_TABLES_MAX];
     const JSCFunctionDef *c_function_table;
     const JSCFinalizer *c_finalizer_table;
+    const JSCMark *c_mark_table;
+    JSContextGCMark gc_mark;
+    void *gc_mark_opaque;
     uint64_t random_state;
     JSInterruptHandler *interrupt_handler;
     JSWriteFunc *write_func; /* for the various dump functions */
@@ -3520,6 +3523,9 @@ static void stdlib_init(JSContext *ctx, const JSValueArray *arr)
     JSValue name, val;
     int i;
 
+    if (!arr)
+        return;
+
     for(i = 0; i < arr->size; i += 2) {
         name = arr->arr[i];
         val = arr->arr[i + 1];
@@ -3611,6 +3617,7 @@ JSContext *JS_NewContext2(void *mem_start, size_t mem_size, const JSSTDLibraryDe
         ctx->n_rom_atom_tables = 1;
         ctx->c_function_table = stdlib_def->c_function_table;
         ctx->c_finalizer_table = stdlib_def->c_finalizer_table;
+        ctx->c_mark_table = stdlib_def->c_mark_table;
         ctx->unique_strings = JS_NULL;
         ctx->unique_strings_len = 0;
     }
@@ -3650,6 +3657,8 @@ JSContext *JS_NewContext2(void *mem_start, size_t mem_size, const JSSTDLibraryDe
 
     ctx->user_data = NULL;
     ctx->user_data_finalizer = NULL;
+    ctx->gc_mark = NULL;
+    ctx->gc_mark_opaque = NULL;
 
     return ctx;
 }
@@ -3684,6 +3693,8 @@ void JS_FreeContext(JSContext *ctx)
     }
     ctx->user_data = NULL;
     ctx->user_data_finalizer = NULL;
+    ctx->gc_mark = NULL;
+    ctx->gc_mark_opaque = NULL;
 }
 void JS_SetContextOpaque(JSContext *ctx, void *opaque)
 {
@@ -3700,6 +3711,12 @@ void JS_SetContextUserData(JSContext *ctx, void *user_data,
 void *JS_GetContextUserData(JSContext *ctx)
 {
     return ctx->user_data;
+}
+
+void JS_SetContextGCMark(JSContext *ctx, void *opaque, JSContextGCMark mark)
+{
+    ctx->gc_mark_opaque = opaque;
+    ctx->gc_mark = mark;
 }
 
 void JS_SetInterruptHandler(JSContext *ctx, JSInterruptHandler *interrupt_handler)
@@ -12128,6 +12145,15 @@ static void gc_mark_flush(GCMarkState *s)
                 const JSObject *p = ptr;
                 gc_mark(s, p->proto);
                 gc_mark(s, p->props);
+
+                if (p->class_id >= JS_CLASS_USER && s->ctx->c_mark_table &&
+                    s->ctx->c_mark_table[p->class_id - JS_CLASS_USER]) {
+                    JSMarkFunc mf;
+                    mf.opaque = s;
+                    mf.mark_value = (void (*)(const JSMarkFunc *, JSValue))gc_mark;
+                    s->ctx->c_mark_table[p->class_id - JS_CLASS_USER](s->ctx, p->u.user.opaque, &mf);
+                }
+
                 switch(p->class_id) {
                 case JS_CLASS_CLOSURE:
                     {
@@ -12285,6 +12311,13 @@ static void gc_mark_all(JSContext *ctx, BOOL keep_atoms)
         gc_mark_root(s, ps->token.value);
         gc_mark_root(s, ps->cur_func);
         gc_mark_root(s, ps->byte_code);
+    }
+
+    if (ctx->gc_mark) {
+        JSMarkFunc mf;
+        mf.opaque = s;
+        mf.mark_value = (void (*)(const JSMarkFunc *, JSValue))gc_mark;
+        ctx->gc_mark(ctx, ctx->gc_mark_opaque, &mf);
     }
 
     /* if the mark stack overflowed, need to scan the heap */

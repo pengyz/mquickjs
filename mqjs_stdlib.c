@@ -48,7 +48,7 @@ static const JSPropDef js_object[] = {
 
 static const JSClassDef js_object_class =
     JS_CLASS_DEF("Object", 1, js_object_constructor, JS_CLASS_OBJECT,
-                 js_object, js_object_proto, NULL, NULL);
+                 js_object, js_object_proto, NULL, NULL, NULL);
 
 static const JSPropDef js_function_proto[] = {
     JS_CGETSET_DEF("prototype", js_function_get_prototype, js_function_set_prototype ),
@@ -62,7 +62,7 @@ static const JSPropDef js_function_proto[] = {
 };
 
 static const JSClassDef js_function_class =
-    JS_CLASS_DEF("Function", 1, js_function_constructor, JS_CLASS_CLOSURE, NULL, js_function_proto, NULL, NULL);
+    JS_CLASS_DEF("Function", 1, js_function_constructor, JS_CLASS_CLOSURE, NULL, js_function_proto, NULL, NULL, NULL);
 
 static const JSPropDef js_number_proto[] = {
     JS_CFUNC_DEF("toExponential", 1, js_number_toExponential ),
@@ -87,10 +87,10 @@ static const JSPropDef js_number[] = {
 };
 
 static const JSClassDef js_number_class =
-    JS_CLASS_DEF("Number", 1, js_number_constructor, JS_CLASS_NUMBER, js_number, js_number_proto, NULL, NULL);
+    JS_CLASS_DEF("Number", 1, js_number_constructor, JS_CLASS_NUMBER, js_number, js_number_proto, NULL, NULL, NULL);
 
 static const JSClassDef js_boolean_class =
-    JS_CLASS_DEF("Boolean", 1, js_boolean_constructor, JS_CLASS_BOOLEAN, NULL, NULL, NULL, NULL);
+    JS_CLASS_DEF("Boolean", 1, js_boolean_constructor, JS_CLASS_BOOLEAN, NULL, NULL, NULL, NULL, NULL);
 
 static const JSPropDef js_string_proto[] = {
     JS_CGETSET_DEF("length", js_string_get_length, js_string_set_length ),
@@ -124,7 +124,7 @@ static const JSPropDef js_string[] = {
 };
 
 static const JSClassDef js_string_class =
-    JS_CLASS_DEF("String", 1, js_string_constructor, JS_CLASS_STRING, js_string, js_string_proto, NULL, NULL);
+    JS_CLASS_DEF("String", 1, js_string_constructor, JS_CLASS_STRING, js_string, js_string_proto, NULL, NULL, NULL);
 
 static const JSPropDef js_array_proto[] = {
     JS_CFUNC_DEF("concat", 1, js_array_concat ),
@@ -158,7 +158,7 @@ static const JSPropDef js_array[] = {
 };
 
 static const JSClassDef js_array_class =
-    JS_CLASS_DEF("Array", 1, js_array_constructor, JS_CLASS_ARRAY, js_array, js_array_proto, NULL, NULL);
+    JS_CLASS_DEF("Array", 1, js_array_constructor, JS_CLASS_ARRAY, js_array, js_array_proto, NULL, NULL, NULL);
 
 static const JSPropDef js_error_proto[] = {
     JS_CFUNC_DEF("toString", 0, js_error_toString ),
@@ -169,7 +169,7 @@ static const JSPropDef js_error_proto[] = {
 };
 
 static const JSClassDef js_error_class =
-    JS_CLASS_MAGIC_DEF("Error", 1, js_error_constructor, JS_CLASS_ERROR, NULL, js_error_proto, NULL, NULL);
+    JS_CLASS_MAGIC_DEF("Error", 1, js_error_constructor, JS_CLASS_ERROR, NULL, js_error_proto, NULL, NULL, NULL);
 
 #define ERROR_DEF(cname, name, class_id)                       \
     static const JSPropDef js_ ## cname ## _proto[] = { \
@@ -177,7 +177,7 @@ static const JSClassDef js_error_class =
         JS_PROP_END,                                         \
     };                                                                 \
     static const JSClassDef js_ ## cname ## _class =                    \
-        JS_CLASS_MAGIC_DEF(name, 1, js_error_constructor, class_id, NULL, js_ ## cname ## _proto, &js_error_class, NULL);
+        JS_CLASS_MAGIC_DEF(name, 1, js_error_constructor, class_id, NULL, js_ ## cname ## _proto, &js_error_class, NULL, NULL);
 
 ERROR_DEF(eval_error, "EvalError", JS_CLASS_EVAL_ERROR)
 ERROR_DEF(range_error, "RangeError", JS_CLASS_RANGE_ERROR)
@@ -248,7 +248,7 @@ static const JSPropDef js_array_buffer_proto[] = {
 };
 
 static const JSClassDef js_array_buffer_class =
-    JS_CLASS_DEF("ArrayBuffer", 1, js_array_buffer_constructor, JS_CLASS_ARRAY_BUFFER, NULL, js_array_buffer_proto, NULL, NULL);
+    JS_CLASS_DEF("ArrayBuffer", 1, js_array_buffer_constructor, JS_CLASS_ARRAY_BUFFER, NULL, js_array_buffer_proto, NULL, NULL, NULL);
 
 static const JSPropDef js_typed_array_base_proto[] = {
     JS_CGETSET_MAGIC_DEF("length", js_typed_array_get_length, NULL, 0 ),
@@ -263,7 +263,7 @@ static const JSPropDef js_typed_array_base_proto[] = {
 };
 
 static const JSClassDef js_typed_array_base_class =
-    JS_CLASS_DEF("TypedArray", 0, js_typed_array_base_constructor, JS_CLASS_TYPED_ARRAY, NULL, js_typed_array_base_proto, NULL, NULL);
+    JS_CLASS_DEF("TypedArray", 0, js_typed_array_base_constructor, JS_CLASS_TYPED_ARRAY, NULL, js_typed_array_base_proto, NULL, NULL, NULL);
 
 #define TA_DEF(name, class_name, bpe)\
 static const JSPropDef js_ ## name [] = {\
@@ -275,7 +275,7 @@ static const JSPropDef js_ ## name ## _proto[] = {\
     JS_PROP_END,\
 };\
 static const JSClassDef js_ ## name ## _class =\
-    JS_CLASS_MAGIC_DEF(#name, 3, js_typed_array_constructor, class_name, js_ ## name, js_ ## name ## _proto, &js_typed_array_base_class, NULL);
+    JS_CLASS_MAGIC_DEF(#name, 3, js_typed_array_constructor, class_name, js_ ## name, js_ ## name ## _proto, &js_typed_array_base_class, NULL, NULL);
 
 TA_DEF(Uint8ClampedArray, JS_CLASS_UINT8C_ARRAY, 1)
 TA_DEF(Int8Array, JS_CLASS_INT8_ARRAY, 1)
@@ -299,7 +299,7 @@ static const JSPropDef js_regexp_proto[] = {
 };
 
 static const JSClassDef js_regexp_class =
-    JS_CLASS_DEF("RegExp", 2, js_regexp_constructor, JS_CLASS_REGEXP, NULL, js_regexp_proto, NULL, NULL);
+    JS_CLASS_DEF("RegExp", 2, js_regexp_constructor, JS_CLASS_REGEXP, NULL, js_regexp_proto, NULL, NULL, NULL);
 
 /* other objects */
 
@@ -309,7 +309,7 @@ static const JSPropDef js_date[] = {
 };
 
 static const JSClassDef js_date_class =
-    JS_CLASS_DEF("Date", 7, js_date_constructor, JS_CLASS_DATE, js_date, NULL, NULL, NULL);
+    JS_CLASS_DEF("Date", 7, js_date_constructor, JS_CLASS_DATE, js_date, NULL, NULL, NULL, NULL);
 
 static const JSPropDef js_console[] = {
     JS_CFUNC_DEF("log", 1, js_print),

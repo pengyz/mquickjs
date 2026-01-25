@@ -18,8 +18,14 @@ static const JSPropDef js_rectangle[] = {
     JS_PROP_END,
 };
 
+static void js_rectangle_gc_mark(JSContext *ctx, void *opaque, const JSMarkFunc *mf)
+{
+    RectangleData *d = opaque;
+    mf->mark_value(mf, d->held);
+}
+
 static const JSClassDef js_rectangle_class =
-    JS_CLASS_DEF("Rectangle", 2, js_rectangle_constructor, JS_CLASS_RECTANGLE, js_rectangle, js_rectangle_proto, NULL, js_rectangle_finalizer);
+    JS_CLASS_DEF("Rectangle", 2, js_rectangle_constructor, JS_CLASS_RECTANGLE, js_rectangle, js_rectangle_proto, NULL, js_rectangle_finalizer, js_rectangle_gc_mark);
 
 static const JSPropDef js_filled_rectangle_proto[] = {
     JS_CGETSET_DEF("color", js_filled_rectangle_get_color, NULL ),
@@ -28,7 +34,7 @@ static const JSPropDef js_filled_rectangle_proto[] = {
 
 /* inherit from Rectangle */
 static const JSClassDef js_filled_rectangle_class =
-    JS_CLASS_DEF("FilledRectangle", 3, js_filled_rectangle_constructor, JS_CLASS_FILLED_RECTANGLE, NULL, js_filled_rectangle_proto, &js_rectangle_class, js_filled_rectangle_finalizer);
+    JS_CLASS_DEF("FilledRectangle", 3, js_filled_rectangle_constructor, JS_CLASS_FILLED_RECTANGLE, NULL, js_filled_rectangle_proto, &js_rectangle_class, js_filled_rectangle_finalizer, NULL);
 
 /* include the full standard library too */
 

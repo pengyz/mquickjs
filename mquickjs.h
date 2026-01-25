@@ -213,8 +213,24 @@ void JS_SetOpaque(JSContext *ctx, JSValue val, void *opaque);
 void *JS_GetOpaque(JSContext *ctx, JSValue val);
 
 typedef JSValue JSCFunction(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+
 /* no JS function call be called from a C finalizer */
 typedef void (*JSCFinalizer)(JSContext *ctx, void *opaque);
+
+/* GC mark callback for embedder/user class opaque objects.
+ *
+ * - Called during GC mark phase.
+ * - Must not call JS APIs (no allocation, no property access, no function calls).
+ * - Only `mark_value()` is allowed to report native -> JS references.
+ */
+typedef struct JSMarkFunc {
+    void (*mark_value)(const struct JSMarkFunc *mf, JSValue v);
+    void *opaque; /* engine private */
+} JSMarkFunc;
+
+typedef void (*JSCMark)(JSContext *ctx, void *opaque, const JSMarkFunc *mf);
+
+typedef void (*JSContextGCMark)(JSContext *ctx, void *opaque, const JSMarkFunc *mf);
 
 typedef enum JSCFunctionDefEnum {  /* XXX: should rename for namespace isolation */
     JS_CFUNC_generic,
@@ -246,6 +262,7 @@ typedef struct {
     const JSWord *stdlib_table;
     const JSCFunctionDef *c_function_table;
     const JSCFinalizer *c_finalizer_table;
+    const JSCMark *c_mark_table;
     uint32_t stdlib_table_len;
     uint32_t stdlib_table_align;
     uint32_t sorted_atoms_offset;
@@ -268,6 +285,13 @@ void JS_SetContextOpaque(JSContext *ctx, void *opaque);
 typedef void (*JSContextUserDataFinalizer)(JSContext *ctx, void *user_data);
 void JS_SetContextUserData(JSContext *ctx, void *user_data, JSContextUserDataFinalizer fin);
 void *JS_GetContextUserData(JSContext *ctx);
+
+/* Set an embedder GC mark callback for context-level roots.
+ *
+ * - Called during GC mark phase.
+ * - Must not call JS APIs; only `mf->mark_value()` is allowed.
+ */
+void JS_SetContextGCMark(JSContext *ctx, void *opaque, JSContextGCMark mark);
 
 /* ridl-tool: per-JSContext extension header (C ABI) */
 #define RIDL_CTX_EXT_MAGIC 0x5249444c /* 'RIDL' */

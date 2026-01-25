@@ -48,6 +48,7 @@
 typedef struct {
     int x;
     int y;
+    JSValue held;
 } RectangleData;
 
 typedef struct {
@@ -71,12 +72,18 @@ static JSValue js_rectangle_constructor(JSContext *ctx, JSValue *this_val, int a
         return JS_EXCEPTION;
     if (JS_ToInt32(ctx, &d->y, argv[1]))
         return JS_EXCEPTION;
+    d->held = JS_UNDEFINED;
     return obj;
 }
+
+static int g_rect_finalizer_count = 0;
 
 static void js_rectangle_finalizer(JSContext *ctx, void *opaque)
 {
     RectangleData *d = opaque;
+    g_rect_finalizer_count++;
+    (void)ctx;
+    d->held = JS_UNDEFINED;
     free(d);
 }
 
@@ -148,6 +155,7 @@ static JSValue js_filled_rectangle_constructor(JSContext *ctx, JSValue *this_val
         return JS_EXCEPTION;
     if (JS_ToInt32(ctx, &d->color, argv[2]))
         return JS_EXCEPTION;
+    d->parent.held = JS_UNDEFINED;
     JS_PopGCRef(ctx, &obj_ref);
     return *obj;
 }
@@ -155,6 +163,8 @@ static JSValue js_filled_rectangle_constructor(JSContext *ctx, JSValue *this_val
 static void js_filled_rectangle_finalizer(JSContext *ctx, void *opaque)
 {
     FilledRectangleData *d = opaque;
+    (void)ctx;
+    d->parent.held = JS_UNDEFINED;
     free(d);
 }
 
@@ -249,6 +259,8 @@ static uint8_t *load_file(const char *filename, int *plen)
     return buf;
 }
 
+static int run_selftest_gc_mark(void);
+
 int main(int argc, const char **argv)
 {
     size_t mem_size;
@@ -257,14 +269,18 @@ int main(int argc, const char **argv)
     JSContext *ctx;
     const char *filename;
     JSValue val;
-    
+
+    if (argc == 2 && strcmp(argv[1], "--selftest-gc-mark") == 0) {
+        return run_selftest_gc_mark();
+    }
+
     if (argc < 2) {
         printf("usage: example script.js\n");
+        printf("       example --selftest-gc-mark\n");
         exit(1);
     }
 
     filename = argv[1];
-
     mem_size = 65536;
     mem_buf = malloc(mem_size);
     ctx = JS_NewContext(mem_buf, mem_size, &js_stdlib);
