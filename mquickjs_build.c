@@ -28,6 +28,17 @@
 #include <inttypes.h>
 #include <string.h>
 #include <assert.h>
+
+/* 导出的 js_stdlib 的链接属性。
+   本工具**按变体分别编译**：ridl 变体带 -DMQUICKJS_ENABLE_RIDL_EXTENSIONS，
+   base 变体不带。据此决定生成 strong 还是 weak 定义：
+   base 用 weak，以便与应用中 ridl 变体的同名 strong 定义共存
+   （应用会同时拿到两个变体的 stdlib），同时单独链接 base 时仍可用。 */
+#ifdef MQUICKJS_ENABLE_RIDL_EXTENSIONS
+#define JS_STDLIB_LINKAGE_STR ""
+#else
+#define JS_STDLIB_LINKAGE_STR "__attribute__((weak)) "
+#endif
 #include <ctype.h>
 #include <math.h>
 
@@ -996,7 +1007,11 @@ int build_atoms(const char *stdlib_name, const JSPropDef *global_obj,
 
     free_class_entries(s);
 
-    printf("const JSSTDLibraryDef %s = {\n", stdlib_name);
+    /* 链接属性：base 变体以 weak 定义 js_stdlib，ridl 变体以 strong 定义。
+       应用最终二进制会同时拿到两个变体的 stdlib（base 经 mquickjs-rs 的 rlib
+       元数据传播，供其自身测试与嵌套构建；ridl 由应用链接），若都是 strong
+       会 duplicate symbol。令 base 为 weak 即可共存。 */
+    printf("%sconst JSSTDLibraryDef %s = {\n", JS_STDLIB_LINKAGE_STR, stdlib_name);
     printf("  js_stdlib_table,\n");
     printf("  js_c_function_table,\n");
     printf("  js_c_finalizer_table,\n");
