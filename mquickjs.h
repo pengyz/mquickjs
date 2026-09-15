@@ -275,6 +275,13 @@ typedef void JSWriteFunc(void *opaque, const void *buf, size_t buf_len);
 /* return != 0 if the JS code needs to be interrupted */
 typedef int JSInterruptHandler(JSContext *ctx, void *opaque);
 
+/* Size of the context header, i.e. the offset of the flexible class_proto[]
+   array inside JSContext. Embedders should ensure the buffer passed to
+   JS_NewContext() is at least
+       JS_ContextHeaderSize() + 2 * stdlib_def->class_count * sizeof(JSValue)
+   plus usable heap/stack space; JS_NewContext() itself only asserts a fixed
+   1024-byte floor and returns no error for an undersized buffer. */
+size_t JS_ContextHeaderSize(void);
 JSContext *JS_NewContext(void *mem_start, size_t mem_size, const JSSTDLibraryDef *stdlib_def);
 /* if prepare_compilation is true, the context will be used to compile
    to a binary file. JS_NewContext2() is not expected to be used in

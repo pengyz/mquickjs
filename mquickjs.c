@@ -3562,6 +3562,23 @@ static void dummy_write_func(void *opaque, const void *buf, size_t buf_len)
 /* if prepare_compilation is true, the context will be used to compile
    to a binary file. It is not expected to be used in the embedded
    version */
+/* 返回 JSContext 头部大小（即柔性数组成员 class_proto[] 的偏移）。
+ *
+ * 供嵌入方校验 mem_start 缓冲区是否足够大：引擎要求
+ *     mem_size >= JS_ContextHeaderSize()
+ *                 + 2 * class_count * sizeof(JSValue)
+ *                 + 可用的堆/栈空间
+ * 而 JS_NewContext2 内部只断言 mem_size >= 1024（且 release 下该断言
+ * 会被编译掉）。缓冲区过小会让 heap_base 越过 stack_top，造成内存损坏
+ * 而非返回错误。本函数让嵌入方能在调用前做前置校验。
+ *
+ * 注意：JSContext 的布局是本文件私有的（mquickjs.h 中为不完整类型），
+ * 因此该偏移无法由嵌入方自行计算。 */
+size_t JS_ContextHeaderSize(void)
+{
+    return offsetof(JSContext, class_proto);
+}
+
 JSContext *JS_NewContext2(void *mem_start, size_t mem_size, const JSSTDLibraryDef *stdlib_def, BOOL prepare_compilation)
 {
     JSContext *ctx;
